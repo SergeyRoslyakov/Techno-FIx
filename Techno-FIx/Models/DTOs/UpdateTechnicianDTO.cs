@@ -1,10 +1,10 @@
 ﻿namespace Techno_FIx.Models.DTOs
 {
-    public class CreateClientDTO
+    public class UpdateTechnicianDTO
     {
         public string FirstName { get; set; } = string.Empty;
         public string LastName { get; set; } = string.Empty;
+        public string Specialization { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
-        public string Email { get; set; } = string.Empty;
     }
 }
