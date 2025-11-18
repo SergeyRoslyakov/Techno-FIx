@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Techno_Fix.Services;
 using Techno_FIx.Models.DTOs;
 
 namespace Techno_Fix.Controllers
@@ -10,7 +11,7 @@ namespace Techno_Fix.Controllers
     [Route("api/[controller]")]
     public class RepairOrdersController : ControllerBase
     {
-        public readonly IRepairOrderService _repairOrderService;
+        private readonly IRepairOrderService _repairOrderService;
 
         public RepairOrdersController(IRepairOrderService repairOrderService)
         {
@@ -71,10 +72,10 @@ namespace Techno_Fix.Controllers
         }
 
         /// <summary>
-        /// Обновить заказ на ремонт
+        /// Обновить статус заказа
         /// </summary>
         [HttpPut("{id}")]
-        public async Task<ActionResult<RepairOrderDTO>> UpdateRepairOrder(int id, UpdateRepairOrderDTO orderDto)
+        public async Task<ActionResult<RepairOrderDTO>> UpdateRepairOrderStatus(int id, UpdateRepairOrderDTO orderDto)
         {
             if (!ModelState.IsValid)
             {
@@ -88,7 +89,7 @@ namespace Techno_Fix.Controllers
                 });
             }
 
-            var order = await _repairOrderService.UpdateOrderAsync(id, orderDto);
+            var order = await _repairOrderService.UpdateOrderStatusAsync(id, orderDto);
             if (order == null)
             {
                 return NotFound(new
@@ -135,16 +136,6 @@ namespace Techno_Fix.Controllers
         }
 
         /// <summary>
-        /// Получить заказы по технику
-        /// </summary>
-        [HttpGet("technician/{technicianId}")]
-        public async Task<ActionResult<IEnumerable<RepairOrderDTO>>> GetRepairOrdersByTechnician(int technicianId)
-        {
-            var orders = await _repairOrderService.GetOrdersByTechnicianAsync(technicianId);
-            return Ok(orders);
-        }
-
-        /// <summary>
         /// Получить статистику по заказам
         /// </summary>
         [HttpGet("statistics")]
@@ -152,27 +143,6 @@ namespace Techno_Fix.Controllers
         {
             var statistics = await _repairOrderService.GetOrdersStatisticsAsync();
             return Ok(statistics);
-        }
-
-        /// <summary>
-        /// Изменить статус заказа
-        /// </summary>
-        [HttpPatch("{id}/status")]
-        public async Task<ActionResult<RepairOrderDTO>> ChangeOrderStatus(int id, [FromBody] string status)
-        {
-            var order = await _repairOrderService.ChangeOrderStatusAsync(id, status);
-            if (order == null)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Заказ на ремонт с ID {id} не найден.",
-                    instance = $"/api/repairorders/{id}/status"
-                });
-            }
-
-            return Ok(order);
         }
     }
 }

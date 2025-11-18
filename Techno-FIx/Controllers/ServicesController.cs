@@ -11,7 +11,7 @@ namespace Techno_Fix.Controllers
     [Route("api/[controller]")]
     public class ServicesController : ControllerBase
     {
-        public readonly IServiceService _serviceService;
+        private readonly IServiceService _serviceService;
 
         public ServicesController(IServiceService serviceService)
         {

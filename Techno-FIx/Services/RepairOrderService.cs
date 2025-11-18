@@ -2,6 +2,7 @@
 using Techno_FIx.Models;
 using Techno_FIx.Models.DTOs;
 using Techno_FIx.Repositories;
+using AutoMapper;
 
 namespace Techno_Fix.Services
 {

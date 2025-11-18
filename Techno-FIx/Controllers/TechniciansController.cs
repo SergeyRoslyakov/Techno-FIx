@@ -1,5 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Techno_Fix.Services;
 using Techno_FIx.Models.DTOs;
+using Techno_FIx.Services;
 
 namespace Techno_Fix.Controllers
 {
