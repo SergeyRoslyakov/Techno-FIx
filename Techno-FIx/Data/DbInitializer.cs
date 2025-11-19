@@ -11,7 +11,6 @@ namespace Techno_Fix.Data
 
             if (context.Clients.Any()) return;
 
-            // 5 клиентов
             var clients = new Client[]
             {
                 new Client { FirstName = "Иван", LastName = "Петров", Phone = "+79161234567", Email = "ivan@mail.ru" },
@@ -23,7 +22,6 @@ namespace Techno_Fix.Data
             context.Clients.AddRange(clients);
             context.SaveChanges();
 
-            // 5 устройств
             var devices = new Device[]
             {
                 new Device { Type = "Ноутбук", Brand = "Lenovo", Model = "ThinkPad X1", SerialNumber = "SN001", ProblemDescription = "Не включается", ClientId = 1 },
@@ -35,7 +33,6 @@ namespace Techno_Fix.Data
             context.Devices.AddRange(devices);
             context.SaveChanges();
 
-            // 5 услуг
             var services = new Service[]
             {
                 new Service { Name = "Диагностика", Description = "Полная диагностика устройства", Price = 500.00m },
@@ -47,7 +44,6 @@ namespace Techno_Fix.Data
             context.Services.AddRange(services);
             context.SaveChanges();
 
-            // 5 техников
             var technicians = new Technician[]
             {
                 new Technician { FirstName = "Андрей", LastName = "Смирнов", Specialization = "Ноутбуки", Phone = "+79161234572" },
@@ -59,7 +55,6 @@ namespace Techno_Fix.Data
             context.Technicians.AddRange(technicians);
             context.SaveChanges();
 
-            // 5 заказов
             var repairOrders = new RepairOrder[]
             {
                 new RepairOrder { DeviceId = 1, ServiceId = 1, TechnicianId = 1, TotalCost = 500.00m, Status = "Completed" },
@@ -69,6 +64,16 @@ namespace Techno_Fix.Data
                 new RepairOrder { DeviceId = 5, ServiceId = 5, TechnicianId = 5, TotalCost = 5000.00m, Status = "Waiting" }
             };
             context.RepairOrders.AddRange(repairOrders);
+            context.SaveChanges();
+
+            var users = new User[]
+            {
+                new User { Username = "admin", Email = "admin@technofix.com", Password = "admin123", Role = "Admin" },
+                new User { Username = "technician1", Email = "tech1@technofix.com", Password = "tech123", Role = "Technician", TechnicianId = 1 },
+                new User { Username = "technician2", Email = "tech2@technofix.com", Password = "tech123", Role = "Technician", TechnicianId = 2 },
+                new User { Username = "user1", Email = "user1@mail.com", Password = "user123", Role = "User" }
+            };
+            context.Users.AddRange(users);
             context.SaveChanges();
         }
     }
