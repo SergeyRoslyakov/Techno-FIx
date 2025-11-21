@@ -10,8 +10,8 @@ namespace Techno_Fix.Services
         Task<IEnumerable<DeviceDTO>> GetAllDevicesAsync();
         Task<DeviceDTO?> GetDeviceByIdAsync(int id);
         Task<DeviceDTO> CreateDeviceAsync(CreateDeviceDTO deviceDto);
-        Task<DeviceDTO?> UpdateDeviceAsync(int id, CreateDeviceDTO deviceDto);
+        Task<bool> UpdateDeviceAsync(int id, CreateDeviceDTO deviceDto);
         Task<bool> DeleteDeviceAsync(int id);
-        Task<IEnumerable<DeviceDTO>> GetDevicesByClientAsync(int clientId);
+        Task<IEnumerable<DeviceDTO>> GetDevicesByClientAsync(int clientId); // Добавляем
     }
 }

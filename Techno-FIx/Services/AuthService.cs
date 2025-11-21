@@ -32,12 +32,19 @@ namespace Techno_FIx.Services
                 throw new ArgumentException("Пользователь с таким email уже существует");
             }
 
+            // Валидация роли
+            var validRoles = new[] { UserRoles.Admin, UserRoles.Technician, UserRoles.User };
+            if (!validRoles.Contains(registerDto.Role))
+            {
+                registerDto.Role = UserRoles.User; // По умолчанию User
+            }
+
             var user = new User
             {
                 Username = registerDto.Username,
                 Email = registerDto.Email,
-                Password = registerDto.Password, // Пароль сохраняется как есть
-                Role = registerDto.Role ?? "User",
+                Password = registerDto.Password,
+                Role = registerDto.Role,
                 TechnicianId = registerDto.TechnicianId
             };
 
@@ -58,7 +65,6 @@ namespace Techno_FIx.Services
             var users = await _userRepository.GetAllAsync();
             var user = users.FirstOrDefault(u => u.Email == loginDto.Email);
 
-            // Простая проверка пароля без хеширования
             if (user == null || user.Password != loginDto.Password)
             {
                 throw new UnauthorizedAccessException("Неверный email или пароль");
@@ -104,6 +110,22 @@ namespace Techno_FIx.Services
                 signingCredentials: creds);
 
             return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+        public bool HasAccess(User user, string requiredRole)
+        {
+            // Admin имеет доступ ко всему
+            if (user.Role == UserRoles.Admin) return true;
+
+            // Technician имеет доступ к Technician и User endpoints
+            if (user.Role == UserRoles.Technician &&
+                (requiredRole == UserRoles.Technician || requiredRole == UserRoles.User))
+                return true;
+
+            // User имеет доступ только к User endpoints
+            if (user.Role == UserRoles.User && requiredRole == UserRoles.User)
+                return true;
+
+            return false;
         }
     }
 }

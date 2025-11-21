@@ -1,4 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Techno_FIx.Models;
 using Techno_FIx.Models.DTOs;
 using Techno_FIx.Services;
 
@@ -9,6 +11,7 @@ namespace Techno_Fix.Controllers
     /// </summary>
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class ClientsController : ControllerBase
     {
         private readonly IClientService _clientService;
@@ -18,121 +21,80 @@ namespace Techno_Fix.Controllers
             _clientService = clientService;
         }
 
-        /// <summary>
-        /// Получить список всех клиентов
-        /// </summary>
         [HttpGet]
+        [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Technician}")]
         public async Task<ActionResult<IEnumerable<ClientDTO>>> GetClients()
         {
             var clients = await _clientService.GetAllClientsAsync();
             return Ok(clients);
         }
 
-        /// <summary>
-        /// Получить клиента по ID
-        /// </summary>
         [HttpGet("{id}")]
+        [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Technician}")]
         public async Task<ActionResult<ClientDTO>> GetClient(int id)
         {
             var client = await _clientService.GetClientByIdAsync(id);
             if (client == null)
             {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Клиент с ID {id} не найден.",
-                    instance = $"/api/clients/{id}"
-                });
+                return NotFound(new { message = $"Клиент с ID {id} не найден" });
             }
-
             return Ok(client);
         }
 
-        /// <summary>
-        /// Создать нового клиента
-        /// </summary>
         [HttpPost]
+        [Authorize(Roles = UserRoles.Admin)]
         public async Task<ActionResult<ClientDTO>> CreateClient(CreateClientDTO clientDto)
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
+                return BadRequest(ModelState);
             }
 
-            var client = await _clientService.CreateClientAsync(clientDto);
-            return CreatedAtAction(nameof(GetClient), new { id = client.Id }, client);
+            try
+            {
+                var createdClient = await _clientService.CreateClientAsync(clientDto);
+                return CreatedAtAction(nameof(GetClient), new { id = createdClient.Id }, createdClient);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
-        /// <summary>
-        /// Обновить данные клиента
-        /// </summary>
         [HttpPut("{id}")]
-        public async Task<ActionResult<ClientDTO>> UpdateClient(int id, UpdateClientDTO clientDto)
+        [Authorize(Roles = UserRoles.Admin)]
+        public async Task<IActionResult> UpdateClient(int id, UpdateClientDTO clientDto)
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
+                return BadRequest(ModelState);
             }
 
-            var client = await _clientService.UpdateClientAsync(id, clientDto);
-            if (client == null)
+            try
             {
-                return NotFound(new
+                var updated = await _clientService.UpdateClientAsync(id, clientDto);
+                if (!updated)
                 {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Клиент с ID {id} не найден.",
-                    instance = $"/api/clients/{id}"
-                });
+                    return NotFound(new { message = $"Клиент с ID {id} не найден" });
+                }
+                return NoContent();
             }
-
-            return Ok(client);
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
-        /// <summary>
-        /// Удалить клиента
-        /// </summary>
         [HttpDelete("{id}")]
+        [Authorize(Roles = UserRoles.Admin)]
         public async Task<IActionResult> DeleteClient(int id)
         {
-            var result = await _clientService.DeleteClientAsync(id);
-            if (!result)
+            var deleted = await _clientService.DeleteClientAsync(id);
+            if (!deleted)
             {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Клиент с ID {id} не найден.",
-                    instance = $"/api/clients/{id}"
-                });
+                return NotFound(new { message = $"Клиент с ID {id} не найден" });
             }
-
             return NoContent();
-        }
-
-        /// <summary>
-        /// Получить клиентов с количеством устройств
-        /// </summary>
-        [HttpGet("with-devices")]
-        public async Task<ActionResult<IEnumerable<ClientDTO>>> GetClientsWithDeviceCount()
-        {
-            var clients = await _clientService.GetClientsWithDeviceCountAsync();
-            return Ok(clients);
         }
     }
 }

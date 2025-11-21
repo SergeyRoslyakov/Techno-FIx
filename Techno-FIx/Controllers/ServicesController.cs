@@ -1,5 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Techno_Fix.Services;
+using Techno_FIx.Models;
 using Techno_FIx.Models.DTOs;
 
 namespace Techno_Fix.Controllers
@@ -18,133 +20,88 @@ namespace Techno_Fix.Controllers
             _serviceService = serviceService;
         }
 
-        /// <summary>
-        /// Получить список всех услуг
-        /// </summary>
         [HttpGet]
+        [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Technician},{UserRoles.User}")]
         public async Task<ActionResult<IEnumerable<ServiceDTO>>> GetServices()
         {
             var services = await _serviceService.GetAllServicesAsync();
             return Ok(services);
         }
 
-        /// <summary>
-        /// Получить услугу по ID
-        /// </summary>
         [HttpGet("{id}")]
+        [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Technician},{UserRoles.User}")]
         public async Task<ActionResult<ServiceDTO>> GetService(int id)
         {
             var service = await _serviceService.GetServiceByIdAsync(id);
             if (service == null)
             {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Услуга с ID {id} не найдена.",
-                    instance = $"/api/services/{id}"
-                });
+                return NotFound(new { message = $"Услуга с ID {id} не найдена" });
             }
-
             return Ok(service);
         }
 
-        /// <summary>
-        /// Создать новую услугу
-        /// </summary>
         [HttpPost]
+        [Authorize(Roles = UserRoles.Admin)]
         public async Task<ActionResult<ServiceDTO>> CreateService(CreateServiceDTO serviceDto)
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
+                return BadRequest(ModelState);
             }
 
-            var service = await _serviceService.CreateServiceAsync(serviceDto);
-            return CreatedAtAction(nameof(GetService), new { id = service.Id }, service);
+            try
+            {
+                var createdService = await _serviceService.CreateServiceAsync(serviceDto);
+                return CreatedAtAction(nameof(GetService), new { id = createdService.Id }, createdService);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
-        /// <summary>
-        /// Обновить данные услуги
-        /// </summary>
         [HttpPut("{id}")]
-        public async Task<ActionResult<ServiceDTO>> UpdateService(int id, CreateServiceDTO serviceDto)
+        [Authorize(Roles = UserRoles.Admin)]
+        public async Task<IActionResult> UpdateService(int id, CreateServiceDTO serviceDto)
         {
             if (!ModelState.IsValid)
             {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
+                return BadRequest(ModelState);
             }
 
-            var service = await _serviceService.UpdateServiceAsync(id, serviceDto);
-            if (service == null)
+            try
             {
-                return NotFound(new
+                var updated = await _serviceService.UpdateServiceAsync(id, serviceDto);
+                if (!updated)
                 {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Услуга с ID {id} не найдена.",
-                    instance = $"/api/services/{id}"
-                });
+                    return NotFound(new { message = $"Услуга с ID {id} не найдена" });
+                }
+                return NoContent();
             }
-
-            return Ok(service);
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
-        /// <summary>
-        /// Удалить услугу
-        /// </summary>
         [HttpDelete("{id}")]
+        [Authorize(Roles = UserRoles.Admin)]
         public async Task<IActionResult> DeleteService(int id)
         {
-            var result = await _serviceService.DeleteServiceAsync(id);
-            if (!result)
+            var deleted = await _serviceService.DeleteServiceAsync(id);
+            if (!deleted)
             {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Услуга с ID {id} не найдена.",
-                    instance = $"/api/services/{id}"
-                });
+                return NotFound(new { message = $"Услуга с ID {id} не найдена" });
             }
-
             return NoContent();
         }
 
-        /// <summary>
-        /// Получить популярные услуги (с наибольшим количеством заказов)
-        /// </summary>
         [HttpGet("popular")]
-        public async Task<ActionResult<IEnumerable<ServiceDTO>>> GetPopularServices()
+        [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Technician},{UserRoles.User}")]
+        public async Task<ActionResult<IEnumerable<ServiceDTO>>> GetPopularServices([FromQuery] int top = 5)
         {
-            var services = await _serviceService.GetPopularServicesAsync();
-            return Ok(services);
-        }
-
-        /// <summary>
-        /// Получить услуги по диапазону цен
-        /// </summary>
-        [HttpGet("price-range")]
-        public async Task<ActionResult<IEnumerable<ServiceDTO>>> GetServicesByPriceRange(
-            [FromQuery] decimal minPrice,
-            [FromQuery] decimal maxPrice)
-        {
-            var services = await _serviceService.GetServicesByPriceRangeAsync(minPrice, maxPrice);
-            return Ok(services);
+            var popularServices = await _serviceService.GetPopularServicesAsync(top);
+            return Ok(popularServices);
         }
     }
 }
