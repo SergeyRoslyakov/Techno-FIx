@@ -1,116 +1,108 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Techno_FIx.Models;
+﻿using Microsoft.EntityFrameworkCore;
+using Techno_FIx.Data;
 using Techno_FIx.Models.DTOs;
+using Techno_FIx.Models;
 using Techno_FIx.Repositories;
-using AutoMapper;
 
 namespace Techno_Fix.Services
 {
-    /// <summary>
-    /// Сервис для работы с заказами на ремонт
-    /// </summary>
     public class RepairOrderService : IRepairOrderService
     {
-        private readonly IRepairOrderRepository _orderRepository;
-        private readonly IDeviceRepository _deviceRepository;
-        private readonly IMapper _mapper;
+        private readonly IRepairOrderRepository _repairOrderRepository;
+        private readonly AppDbContext _context;
 
-        public RepairOrderService(IRepairOrderRepository orderRepository,
-                               IDeviceRepository deviceRepository,
-                               IMapper mapper)
+        public RepairOrderService(IRepairOrderRepository repairOrderRepository, AppDbContext context)
         {
-            _orderRepository = orderRepository;
-            _deviceRepository = deviceRepository;
-            _mapper = mapper;
+            _repairOrderRepository = repairOrderRepository;
+            _context = context;
         }
 
-        /// <summary>
-        /// Получить все заказы с деталями
-        /// </summary>
-        public async Task<IEnumerable<RepairOrderDTO>> GetAllOrdersAsync()
+        public async Task<IEnumerable<RepairOrderDTO>> GetAllRepairOrdersAsync()
         {
-            var orders = await _orderRepository.GetRepairOrdersWithDetailsAsync();
-            return _mapper.Map<IEnumerable<RepairOrderDTO>>(orders);
+            var orders = await _context.RepairOrders
+                .Include(ro => ro.Device)
+                .ThenInclude(d => d.Client)
+                .Include(ro => ro.Service)
+                .Include(ro => ro.Technician)
+                .ToListAsync();
+
+            return orders.Select(MapToRepairOrderDTO);
         }
 
-        /// <summary>
-        /// Получить заказ по ID с деталями
-        /// </summary>
-        public async Task<RepairOrderDTO?> GetOrderByIdAsync(int id)
+        public async Task<RepairOrderDTO?> GetRepairOrderByIdAsync(int id)
         {
-            var order = await _orderRepository.GetRepairOrderWithDetailsAsync(id);
-            return _mapper.Map<RepairOrderDTO>(order);
+            var order = await _context.RepairOrders
+                .Include(ro => ro.Device)
+                .ThenInclude(d => d.Client)
+                .Include(ro => ro.Service)
+                .Include(ro => ro.Technician)
+                .FirstOrDefaultAsync(ro => ro.Id == id);
+
+            return order == null ? null : MapToRepairOrderDTO(order);
         }
 
-        /// <summary>
-        /// Создать новый заказ на ремонт
-        /// </summary>
-        public async Task<RepairOrderDTO> CreateOrderAsync(CreateRepairOrderDTO orderDto)
+        public async Task<RepairOrderDTO> CreateRepairOrderAsync(CreateRepairOrderDTO orderDto)
         {
-            var device = await _deviceRepository.GetByIdAsync(orderDto.DeviceId);
-            if (device == null)
-                throw new ArgumentException("Device not found");
+            var order = new RepairOrder
+            {
+                DeviceId = orderDto.DeviceId,
+                ServiceId = orderDto.ServiceId,
+                TechnicianId = orderDto.TechnicianId,
+                CreatedDate = DateTime.UtcNow,
+                Status = "Received",
+                TotalCost = 0
+            };
 
-            var order = _mapper.Map<RepairOrder>(orderDto);
-            order.CreatedDate = DateTime.UtcNow;
-            order.Status = "Received";
-
-            var createdOrder = await _orderRepository.CreateAsync(order);
-            var orderWithDetails = await _orderRepository.GetRepairOrderWithDetailsAsync(createdOrder.Id);
-
-            return _mapper.Map<RepairOrderDTO>(orderWithDetails);
+            var created = await _repairOrderRepository.CreateAsync(order);
+            return MapToRepairOrderDTO(created);
         }
 
-        /// <summary>
-        /// Обновить статус заказа
-        /// </summary>
-        public async Task<RepairOrderDTO?> UpdateOrderStatusAsync(int id, UpdateRepairOrderDTO orderDto)
+        public async Task<bool> UpdateRepairOrderAsync(int id, UpdateRepairOrderDTO orderDto)
         {
-            var existingOrder = await _orderRepository.GetByIdAsync(id);
-            if (existingOrder == null)
-                return null;
+            var existing = await _repairOrderRepository.GetByIdAsync(id);
+            if (existing == null) return false;
 
-            _mapper.Map(orderDto, existingOrder);
+            existing.Status = orderDto.Status;
+            existing.TotalCost = orderDto.TotalCost;
 
             if (orderDto.Status == "Completed")
-                existingOrder.CompletedDate = DateTime.UtcNow;
+                existing.CompletedDate = DateTime.UtcNow;
 
-            var updatedOrder = await _orderRepository.UpdateAsync(existingOrder);
-            var orderWithDetails = await _orderRepository.GetRepairOrderWithDetailsAsync(updatedOrder.Id);
-
-            return _mapper.Map<RepairOrderDTO>(orderWithDetails);
+            await _repairOrderRepository.UpdateAsync(existing);
+            return true;
         }
 
-        /// <summary>
-        /// Удалить заказ на ремонт
-        /// </summary>
-        public async Task<bool> DeleteOrderAsync(int id)
+        public async Task<bool> DeleteRepairOrderAsync(int id)
         {
-            return await _orderRepository.DeleteAsync(id);
+            return await _repairOrderRepository.DeleteAsync(id);
         }
 
-        /// <summary>
-        /// Получить заказы по статусу
-        /// </summary>
-        public async Task<IEnumerable<RepairOrderDTO>> GetOrdersByStatusAsync(string status)
+        public async Task<bool> UpdateOrderStatusAsync(int id, string status)
         {
-            var orders = await _orderRepository.GetRepairOrdersByStatusAsync(status);
-            return _mapper.Map<IEnumerable<RepairOrderDTO>>(orders);
+            var existing = await _repairOrderRepository.GetByIdAsync(id);
+            if (existing == null) return false;
+
+            existing.Status = status;
+            if (status == "Completed")
+                existing.CompletedDate = DateTime.UtcNow;
+
+            await _repairOrderRepository.UpdateAsync(existing);
+            return true;
         }
 
-        /// <summary>
-        /// Получить статистику по заказам
-        /// </summary>
-        public async Task<object> GetOrdersStatisticsAsync()
+        private RepairOrderDTO MapToRepairOrderDTO(RepairOrder order)
         {
-            var orders = await _orderRepository.GetAllAsync();
-
-            return new
+            return new RepairOrderDTO
             {
-                TotalOrders = orders.Count(),
-                CompletedOrders = orders.Count(o => o.Status == "Completed"),
-                InProgressOrders = orders.Count(o => o.Status == "InProgress"),
-                TotalRevenue = orders.Where(o => o.Status == "Completed").Sum(o => o.TotalCost)
+                Id = order.Id,
+                CreatedDate = order.CreatedDate,
+                CompletedDate = order.CompletedDate,
+                TotalCost = order.TotalCost,
+                Status = order.Status,
+                DeviceInfo = $"{order.Device?.Brand} {order.Device?.Model}",
+                ServiceName = order.Service?.Name ?? "",
+                TechnicianName = $"{order.Technician?.FirstName} {order.Technician?.LastName}",
+                ClientName = $"{order.Device?.Client?.FirstName} {order.Device?.Client?.LastName}"
             };
         }
     }

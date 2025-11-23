@@ -1,8 +1,10 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using Techno_Fix.Services;
 using Techno_FIx.Models.DTOs;
 using Techno_FIx.Services;
 
-namespace Techno_FIx.Controllers
+namespace Techno_Fix.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -17,69 +19,158 @@ namespace Techno_FIx.Controllers
             _logger = logger;
         }
 
+        // РЕГИСТРАЦИЯ ТОЛЬКО ДЛЯ АДМИНОВ
         [HttpPost("register")]
-        public async Task<ActionResult<AuthResponseDTO>> Register(RegisterRequestDTO registerDto)
+        [Authorize(Roles = "Admin")] // ТОЛЬКО АДМИН МОЖЕТ РЕГИСТРИРОВАТЬ
+        public async Task<ActionResult> Register(RegisterRequestDTO registerDto)
         {
             try
             {
+                _logger.LogInformation("Запрос на регистрацию пользователя: {Email} от администратора: {AdminName}",
+                    registerDto.Email, User.Identity?.Name);
+
                 if (!ModelState.IsValid)
                 {
+                    _logger.LogWarning("Невалидные данные при регистрации");
                     return BadRequest(ModelState);
                 }
 
                 var result = await _authService.RegisterAsync(registerDto);
 
-                _logger.LogInformation("Новый пользователь зарегистрирован: {Email}", registerDto.Email);
+                _logger.LogInformation("Пользователь успешно зарегистрирован администратором: {Email}", registerDto.Email);
 
-                return CreatedAtAction(nameof(Register), new { id = result.User.Id }, new
+                return Ok(new
                 {
-                    userId = result.User.Id,
+                    success = true,
                     message = "Пользователь успешно зарегистрирован",
                     token = result.Token,
-                    user = result.User
+                    expires = result.Expires.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                    user = new
+                    {
+                        id = result.User.Id,
+                        username = result.User.Username,
+                        email = result.User.Email,
+                        role = result.User.Role,
+                        technicianId = result.User.TechnicianId
+                    }
                 });
             }
             catch (ArgumentException ex)
             {
-                return BadRequest(new { error = ex.Message });
+                _logger.LogWarning("Ошибка аргумента при регистрации: {Message}", ex.Message);
+                return BadRequest(new { success = false, error = ex.Message });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при регистрации пользователя");
-                return StatusCode(500, new { error = "Внутренняя ошибка сервера" });
+                _logger.LogError(ex, "Критическая ошибка при регистрации пользователя");
+                return StatusCode(500, new { success = false, error = "Внутренняя ошибка сервера" });
             }
         }
 
+        // ВХОД ОСТАЕТСЯ ДОСТУПЕН ДЛЯ ВСЕХ
         [HttpPost("login")]
-        public async Task<ActionResult<AuthResponseDTO>> Login(LoginRequestDTO loginDto)
+        [AllowAnonymous] // Вход доступен всем
+        public async Task<ActionResult> Login(LoginRequestDTO loginDto)
         {
             try
             {
+                _logger.LogInformation("Запрос на вход пользователя: {Email}", loginDto.Email);
+
                 if (!ModelState.IsValid)
                 {
+                    _logger.LogWarning("Невалидные данные при входе");
                     return BadRequest(ModelState);
                 }
 
                 var result = await _authService.LoginAsync(loginDto);
 
-                _logger.LogInformation("Пользователь вошел в систему: {Email}", loginDto.Email);
+                _logger.LogInformation("Успешный вход пользователя: {Email}", loginDto.Email);
 
                 return Ok(new
                 {
+                    success = true,
+                    message = "Успешный вход в систему",
                     token = result.Token,
-                    expires = result.Expires,
-                    user = result.User
+                    expires = result.Expires.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                    user = new
+                    {
+                        id = result.User.Id,
+                        username = result.User.Username,
+                        email = result.User.Email,
+                        role = result.User.Role,
+                        technicianId = result.User.TechnicianId
+                    }
                 });
             }
             catch (UnauthorizedAccessException ex)
             {
-                return Unauthorized(new { error = ex.Message });
+                _logger.LogWarning("Неавторизованный доступ при входе: {Email} - {Message}", loginDto.Email, ex.Message);
+                return Unauthorized(new { success = false, error = ex.Message });
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при входе пользователя");
-                return StatusCode(500, new { error = "Внутренняя ошибка сервера" });
+                _logger.LogError(ex, "Критическая ошибка при входе пользователя");
+                return StatusCode(500, new { success = false, error = "Внутренняя ошибка сервера" });
             }
         }
+
+        // ПУБЛИЧНЫЙ МЕТОД ДЛЯ РЕГИСТРАЦИИ ТОЛЬКО ПОЛЬЗОВАТЕЛЕЙ (User)
+        [HttpPost("register-user")]
+        [AllowAnonymous] // Доступно без авторизации
+        public async Task<ActionResult> RegisterUser(RegisterUserDTO registerDto)
+        {
+            try
+            {
+                _logger.LogInformation("Публичная регистрация пользователя: {Email}", registerDto.Email);
+
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(ModelState);
+                }
+
+                // Фиксируем роль "User" - нельзя зарегистрировать админа или техника
+                var internalDto = new RegisterRequestDTO
+                {
+                    Username = registerDto.Username,
+                    Email = registerDto.Email,
+                    Password = registerDto.Password,
+                    Role = "User" // ТОЛЬКО РОЛЬ USER
+                };
+
+                var result = await _authService.RegisterAsync(internalDto);
+
+                _logger.LogInformation("Пользователь успешно зарегистрирован через публичный метод: {Email}", registerDto.Email);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Пользователь успешно зарегистрирован",
+                    user = new
+                    {
+                        id = result.User.Id,
+                        username = result.User.Username,
+                        email = result.User.Email,
+                        role = result.User.Role
+                    }
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, error = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при публичной регистрации");
+                return StatusCode(500, new { success = false, error = "Внутренняя ошибка сервера" });
+            }
+        }
+    }
+
+    // DTO для публичной регистрации (только User)
+    public class RegisterUserDTO
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
     }
 }

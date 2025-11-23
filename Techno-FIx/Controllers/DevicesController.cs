@@ -1,138 +1,79 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Techno_Fix.Services;
 using Techno_FIx.Models.DTOs;
 
 namespace Techno_Fix.Controllers
 {
-    /// <summary>
-    /// Контроллер для управления устройствами
-    /// </summary>
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class DevicesController : ControllerBase
     {
         private readonly IDeviceService _deviceService;
+        private readonly ILogger<DevicesController> _logger;
 
-        public DevicesController(IDeviceService deviceService)
+        public DevicesController(IDeviceService deviceService, ILogger<DevicesController> logger)
         {
             _deviceService = deviceService;
+            _logger = logger;
         }
 
-        /// <summary>
-        /// Получить список всех устройств
-        /// </summary>
         [HttpGet]
+        [Authorize(Roles = "Admin,Technician")]
         public async Task<ActionResult<IEnumerable<DeviceDTO>>> GetDevices()
         {
             var devices = await _deviceService.GetAllDevicesAsync();
             return Ok(devices);
         }
 
-        /// <summary>
-        /// Получить устройство по ID
-        /// </summary>
         [HttpGet("{id}")]
+        [Authorize(Roles = "Admin,Technician")]
         public async Task<ActionResult<DeviceDTO>> GetDevice(int id)
         {
             var device = await _deviceService.GetDeviceByIdAsync(id);
             if (device == null)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Устройство с ID {id} не найдено.",
-                    instance = $"/api/devices/{id}"
-                });
-            }
+                return NotFound(new { message = "Устройство не найдено" });
 
             return Ok(device);
         }
 
-        /// <summary>
-        /// Создать новое устройство
-        /// </summary>
         [HttpPost]
+        [Authorize(Roles = "Admin,Technician")]
         public async Task<ActionResult<DeviceDTO>> CreateDevice(CreateDeviceDTO deviceDto)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
-            }
+                return BadRequest(ModelState);
 
             var device = await _deviceService.CreateDeviceAsync(deviceDto);
+
+            // УБРАТЬ оператор ! отсюда - строка 41
             return CreatedAtAction(nameof(GetDevice), new { id = device.Id }, device);
         }
 
-        /// <summary>
-        /// Обновить данные устройства
-        /// </summary>
         [HttpPut("{id}")]
-        public async Task<ActionResult<DeviceDTO>> UpdateDevice(int id, CreateDeviceDTO deviceDto)
+        [Authorize(Roles = "Admin,Technician")]
+        public async Task<IActionResult> UpdateDevice(int id, CreateDeviceDTO deviceDto)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
-            }
+                return BadRequest(ModelState);
 
-            var device = await _deviceService.UpdateDeviceAsync(id, deviceDto);
-            if (device == null)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Устройство с ID {id} не найдено.",
-                    instance = $"/api/devices/{id}"
-                });
-            }
-
-            return Ok(device);
-        }
-
-        /// <summary>
-        /// Удалить устройство
-        /// </summary>
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteDevice(int id)
-        {
-            var result = await _deviceService.DeleteDeviceAsync(id);
-            if (!result)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Устройство с ID {id} не найдено.",
-                    instance = $"/api/devices/{id}"
-                });
-            }
+            var updated = await _deviceService.UpdateDeviceAsync(id, deviceDto);
+            if (updated == null)
+                return NotFound(new { message = "Устройство не найдено" });
 
             return NoContent();
         }
 
-        /// <summary>
-        /// Получить устройства по клиенту
-        /// </summary>
-        [HttpGet("client/{clientId}")]
-        public async Task<ActionResult<IEnumerable<DeviceDTO>>> GetDevicesByClient(int clientId)
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteDevice(int id)
         {
-            var devices = await _deviceService.GetDevicesByClientAsync(clientId);
-            return Ok(devices);
+            var deleted = await _deviceService.DeleteDeviceAsync(id);
+            if (!deleted)
+                return NotFound(new { message = "Устройство не найдено" });
+
+            return NoContent();
         }
     }
 }

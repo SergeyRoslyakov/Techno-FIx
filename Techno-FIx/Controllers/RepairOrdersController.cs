@@ -1,148 +1,100 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 using Techno_Fix.Services;
 using Techno_FIx.Models.DTOs;
+using Techno_FIx.Models;
 
 namespace Techno_Fix.Controllers
 {
-    /// <summary>
-    /// Контроллер для управления заказами на ремонт
-    /// </summary>
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class RepairOrdersController : ControllerBase
     {
         private readonly IRepairOrderService _repairOrderService;
+        private readonly ILogger<RepairOrdersController> _logger;
 
-        public RepairOrdersController(IRepairOrderService repairOrderService)
+        public RepairOrdersController(IRepairOrderService repairOrderService, ILogger<RepairOrdersController> logger)
         {
             _repairOrderService = repairOrderService;
+            _logger = logger;
         }
 
-        /// <summary>
-        /// Получить список всех заказов на ремонт
-        /// </summary>
         [HttpGet]
+        [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Technician}")]
         public async Task<ActionResult<IEnumerable<RepairOrderDTO>>> GetRepairOrders()
         {
-            var orders = await _repairOrderService.GetAllOrdersAsync();
+            var orders = await _repairOrderService.GetAllRepairOrdersAsync();
             return Ok(orders);
         }
 
-        /// <summary>
-        /// Получить заказ на ремонт по ID
-        /// </summary>
+        [HttpGet("my-orders")]
+        [Authorize(Roles = UserRoles.User)] // Только User может видеть свои заказы
+        public async Task<ActionResult<IEnumerable<RepairOrderDTO>>> GetMyOrders()
+        {
+            // Временное решение - возвращаем все заказы
+            // В реальном приложении нужно фильтровать по пользователю
+            var orders = await _repairOrderService.GetAllRepairOrdersAsync();
+            return Ok(orders.Take(3)); // Возвращаем только 3 заказа для примера
+        }
+
         [HttpGet("{id}")]
+        [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Technician},{UserRoles.User}")]
         public async Task<ActionResult<RepairOrderDTO>> GetRepairOrder(int id)
         {
-            var order = await _repairOrderService.GetOrderByIdAsync(id);
+            var order = await _repairOrderService.GetRepairOrderByIdAsync(id);
             if (order == null)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Заказ на ремонт с ID {id} не найден.",
-                    instance = $"/api/repairorders/{id}"
-                });
-            }
+                return NotFound(new { message = "Заказ не найден" });
 
             return Ok(order);
         }
 
-        /// <summary>
-        /// Создать новый заказ на ремонт
-        /// </summary>
         [HttpPost]
+        [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Technician}")]
         public async Task<ActionResult<RepairOrderDTO>> CreateRepairOrder(CreateRepairOrderDTO orderDto)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
-            }
+                return BadRequest(ModelState);
 
-            var order = await _repairOrderService.CreateOrderAsync(orderDto);
+            var order = await _repairOrderService.CreateRepairOrderAsync(orderDto);
             return CreatedAtAction(nameof(GetRepairOrder), new { id = order.Id }, order);
         }
 
-        /// <summary>
-        /// Обновить статус заказа
-        /// </summary>
         [HttpPut("{id}")]
-        public async Task<ActionResult<RepairOrderDTO>> UpdateRepairOrderStatus(int id, UpdateRepairOrderDTO orderDto)
+        [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Technician}")]
+        public async Task<IActionResult> UpdateRepairOrder(int id, UpdateRepairOrderDTO orderDto)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
-            }
+                return BadRequest(ModelState);
 
-            var order = await _repairOrderService.UpdateOrderStatusAsync(id, orderDto);
-            if (order == null)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Заказ на ремонт с ID {id} не найден.",
-                    instance = $"/api/repairorders/{id}"
-                });
-            }
-
-            return Ok(order);
-        }
-
-        /// <summary>
-        /// Удалить заказ на ремонт
-        /// </summary>
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteRepairOrder(int id)
-        {
-            var result = await _repairOrderService.DeleteOrderAsync(id);
-            if (!result)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Заказ на ремонт с ID {id} не найден.",
-                    instance = $"/api/repairorders/{id}"
-                });
-            }
+            var updated = await _repairOrderService.UpdateRepairOrderAsync(id, orderDto);
+            if (!updated)
+                return NotFound(new { message = "Заказ не найден" });
 
             return NoContent();
         }
 
-        /// <summary>
-        /// Получить заказы по статусу
-        /// </summary>
-        [HttpGet("status/{status}")]
-        public async Task<ActionResult<IEnumerable<RepairOrderDTO>>> GetRepairOrdersByStatus(string status)
+        [HttpDelete("{id}")]
+        [Authorize(Roles = UserRoles.Admin)] // Только админ может удалять
+        public async Task<IActionResult> DeleteRepairOrder(int id)
         {
-            var orders = await _repairOrderService.GetOrdersByStatusAsync(status);
-            return Ok(orders);
+            var deleted = await _repairOrderService.DeleteRepairOrderAsync(id);
+            if (!deleted)
+                return NotFound(new { message = "Заказ не найден" });
+
+            return NoContent();
         }
 
-        /// <summary>
-        /// Получить статистику по заказам
-        /// </summary>
-        [HttpGet("statistics")]
-        public async Task<ActionResult<object>> GetRepairOrdersStatistics()
+        [HttpPatch("{id}/status")]
+        [Authorize(Roles = $"{UserRoles.Admin},{UserRoles.Technician}")]
+        public async Task<IActionResult> UpdateOrderStatus(int id, [FromBody] string status)
         {
-            var statistics = await _repairOrderService.GetOrdersStatisticsAsync();
-            return Ok(statistics);
+            var updated = await _repairOrderService.UpdateOrderStatusAsync(id, status);
+            if (!updated)
+                return NotFound(new { message = "Заказ не найден" });
+
+            return NoContent();
         }
     }
 }

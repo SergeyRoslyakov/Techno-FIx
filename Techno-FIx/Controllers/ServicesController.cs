@@ -1,150 +1,76 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Techno_Fix.Services;
 using Techno_FIx.Models.DTOs;
 
 namespace Techno_Fix.Controllers
 {
-    /// <summary>
-    /// Контроллер для управления услугами сервисного центра
-    /// </summary>
     [ApiController]
     [Route("api/[controller]")]
     public class ServicesController : ControllerBase
     {
         private readonly IServiceService _serviceService;
+        private readonly ILogger<ServicesController> _logger;
 
-        public ServicesController(IServiceService serviceService)
+        public ServicesController(IServiceService serviceService, ILogger<ServicesController> logger)
         {
             _serviceService = serviceService;
+            _logger = logger;
         }
 
-        /// <summary>
-        /// Получить список всех услуг
-        /// </summary>
         [HttpGet]
+        [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<ServiceDTO>>> GetServices()
         {
             var services = await _serviceService.GetAllServicesAsync();
             return Ok(services);
         }
 
-        /// <summary>
-        /// Получить услугу по ID
-        /// </summary>
         [HttpGet("{id}")]
+        [AllowAnonymous]
         public async Task<ActionResult<ServiceDTO>> GetService(int id)
         {
             var service = await _serviceService.GetServiceByIdAsync(id);
             if (service == null)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Услуга с ID {id} не найдена.",
-                    instance = $"/api/services/{id}"
-                });
-            }
+                return NotFound(new { message = "Услуга не найдена" });
 
             return Ok(service);
         }
 
-        /// <summary>
-        /// Создать новую услугу
-        /// </summary>
         [HttpPost]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<ServiceDTO>> CreateService(CreateServiceDTO serviceDto)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
-            }
+                return BadRequest(ModelState);
 
             var service = await _serviceService.CreateServiceAsync(serviceDto);
             return CreatedAtAction(nameof(GetService), new { id = service.Id }, service);
         }
 
-        /// <summary>
-        /// Обновить данные услуги
-        /// </summary>
         [HttpPut("{id}")]
-        public async Task<ActionResult<ServiceDTO>> UpdateService(int id, CreateServiceDTO serviceDto)
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> UpdateService(int id, CreateServiceDTO serviceDto)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
-            }
+                return BadRequest(ModelState);
 
-            var service = await _serviceService.UpdateServiceAsync(id, serviceDto);
-            if (service == null)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Услуга с ID {id} не найдена.",
-                    instance = $"/api/services/{id}"
-                });
-            }
-
-            return Ok(service);
-        }
-
-        /// <summary>
-        /// Удалить услугу
-        /// </summary>
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteService(int id)
-        {
-            var result = await _serviceService.DeleteServiceAsync(id);
-            if (!result)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Услуга с ID {id} не найдена.",
-                    instance = $"/api/services/{id}"
-                });
-            }
+            var updated = await _serviceService.UpdateServiceAsync(id, serviceDto);
+            if (updated == null)
+                return NotFound(new { message = "Услуга не найдена" });
 
             return NoContent();
         }
 
-        /// <summary>
-        /// Получить популярные услуги (с наибольшим количеством заказов)
-        /// </summary>
-        [HttpGet("popular")]
-        public async Task<ActionResult<IEnumerable<ServiceDTO>>> GetPopularServices()
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteService(int id)
         {
-            var services = await _serviceService.GetPopularServicesAsync();
-            return Ok(services);
-        }
+            var deleted = await _serviceService.DeleteServiceAsync(id);
+            if (!deleted)
+                return NotFound(new { message = "Услуга не найдена" });
 
-        /// <summary>
-        /// Получить услуги по диапазону цен
-        /// </summary>
-        [HttpGet("price-range")]
-        public async Task<ActionResult<IEnumerable<ServiceDTO>>> GetServicesByPriceRange(
-            [FromQuery] decimal minPrice,
-            [FromQuery] decimal maxPrice)
-        {
-            var services = await _serviceService.GetServicesByPriceRangeAsync(minPrice, maxPrice);
-            return Ok(services);
+            return NoContent();
         }
     }
 }

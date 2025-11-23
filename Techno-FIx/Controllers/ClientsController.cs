@@ -1,138 +1,150 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
+using Techno_Fix.Services;
 using Techno_FIx.Models.DTOs;
 using Techno_FIx.Services;
 
 namespace Techno_Fix.Controllers
 {
-    /// <summary>
-    /// Контроллер для управления клиентами
-    /// </summary>
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class ClientsController : ControllerBase
     {
         private readonly IClientService _clientService;
+        private readonly ILogger<ClientsController> _logger;
 
-        public ClientsController(IClientService clientService)
+        public ClientsController(IClientService clientService, ILogger<ClientsController> logger)
         {
             _clientService = clientService;
+            _logger = logger;
         }
 
-        /// <summary>
-        /// Получить список всех клиентов
-        /// </summary>
         [HttpGet]
+        [Authorize(Roles = "Admin,Technician")]
         public async Task<ActionResult<IEnumerable<ClientDTO>>> GetClients()
         {
-            var clients = await _clientService.GetAllClientsAsync();
-            return Ok(clients);
+            try
+            {
+                _logger.LogInformation("Запрос списка клиентов пользователем: {UserName}", User.Identity?.Name);
+                var clients = await _clientService.GetAllClientsAsync();
+                return Ok(clients);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при получении списка клиентов");
+                return StatusCode(500, new { error = "Внутренняя ошибка сервера" });
+            }
         }
 
-        /// <summary>
-        /// Получить клиента по ID
-        /// </summary>
         [HttpGet("{id}")]
+        [Authorize(Roles = "Admin,Technician")]
         public async Task<ActionResult<ClientDTO>> GetClient(int id)
         {
-            var client = await _clientService.GetClientByIdAsync(id);
-            if (client == null)
+            try
             {
-                return NotFound(new
+                _logger.LogInformation("Запрос клиента {ClientId} пользователем: {UserName}", id, User.Identity?.Name);
+                var client = await _clientService.GetClientByIdAsync(id);
+                if (client == null)
                 {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Клиент с ID {id} не найден.",
-                    instance = $"/api/clients/{id}"
-                });
+                    _logger.LogWarning("Клиент с ID {ClientId} не найден", id);
+                    return NotFound(new { message = $"Клиент с ID {id} не найден" });
+                }
+                return Ok(client);
             }
-
-            return Ok(client);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при получении клиента {ClientId}", id);
+                return StatusCode(500, new { error = "Внутренняя ошибка сервера" });
+            }
         }
 
-        /// <summary>
-        /// Создать нового клиента
-        /// </summary>
         [HttpPost]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<ClientDTO>> CreateClient(CreateClientDTO clientDto)
         {
-            if (!ModelState.IsValid)
+            try
             {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
-            }
+                _logger.LogInformation("Создание клиента пользователем: {UserName}", User.Identity?.Name);
 
-            var client = await _clientService.CreateClientAsync(clientDto);
-            return CreatedAtAction(nameof(GetClient), new { id = client.Id }, client);
+                if (!ModelState.IsValid)
+                {
+                    _logger.LogWarning("Невалидные данные при создании клиента");
+                    return BadRequest(ModelState);
+                }
+
+                var createdClient = await _clientService.CreateClientAsync(clientDto);
+
+                _logger.LogInformation("Клиент успешно создан с ID: {ClientId}", createdClient.Id);
+
+                return CreatedAtAction(nameof(GetClient), new { id = createdClient.Id }, createdClient);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при создании клиента");
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
-        /// <summary>
-        /// Обновить данные клиента
-        /// </summary>
         [HttpPut("{id}")]
-        public async Task<ActionResult<ClientDTO>> UpdateClient(int id, UpdateClientDTO clientDto)
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> UpdateClient(int id, UpdateClientDTO clientDto)
         {
-            if (!ModelState.IsValid)
+            try
             {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
-            }
+                _logger.LogInformation("Обновление клиента {ClientId} пользователем: {UserName}", id, User.Identity?.Name);
 
-            var client = await _clientService.UpdateClientAsync(id, clientDto);
-            if (client == null)
+                if (!ModelState.IsValid)
+                {
+                    _logger.LogWarning("Невалидные данные при обновлении клиента {ClientId}", id);
+                    return BadRequest(ModelState);
+                }
+
+                var updated = await _clientService.UpdateClientAsync(id, clientDto);
+                if (updated == null)
+                {
+                    _logger.LogWarning("Клиент с ID {ClientId} не найден для обновления", id);
+                    return NotFound(new { message = $"Клиент с ID {id} не найден" });
+                }
+
+                _logger.LogInformation("Клиент {ClientId} успешно обновлен", id);
+                return NoContent();
+            }
+            catch (Exception ex)
             {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Клиент с ID {id} не найден.",
-                    instance = $"/api/clients/{id}"
-                });
+                _logger.LogError(ex, "Ошибка при обновлении клиента {ClientId}", id);
+                return BadRequest(new { message = ex.Message });
             }
-
-            return Ok(client);
         }
 
-        /// <summary>
-        /// Удалить клиента
-        /// </summary>
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteClient(int id)
         {
-            var result = await _clientService.DeleteClientAsync(id);
-            if (!result)
+            try
             {
-                return NotFound(new
+                var userName = User.Identity?.Name;
+                var userRoles = string.Join(", ", User.Claims.Where(c => c.Type == ClaimTypes.Role).Select(c => c.Value));
+
+                _logger.LogInformation("Удаление клиента {ClientId} пользователем: {UserName} с ролями: {Roles}",
+                    id, userName, userRoles);
+
+                var deleted = await _clientService.DeleteClientAsync(id);
+                if (!deleted)
                 {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Клиент с ID {id} не найден.",
-                    instance = $"/api/clients/{id}"
-                });
+                    _logger.LogWarning("Клиент с ID {ClientId} не найден для удаления", id);
+                    return NotFound(new { message = $"Клиент с ID {id} не найден" });
+                }
+
+                _logger.LogInformation("Клиент {ClientId} успешно удален пользователем {UserName}", id, userName);
+                return NoContent();
             }
-
-            return NoContent();
-        }
-
-        /// <summary>
-        /// Получить клиентов с количеством устройств
-        /// </summary>
-        [HttpGet("with-devices")]
-        public async Task<ActionResult<IEnumerable<ClientDTO>>> GetClientsWithDeviceCount()
-        {
-            var clients = await _clientService.GetClientsWithDeviceCountAsync();
-            return Ok(clients);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при удалении клиента {ClientId}", id);
+                return StatusCode(500, new { error = "Внутренняя ошибка сервера при удалении клиента" });
+            }
         }
     }
 }

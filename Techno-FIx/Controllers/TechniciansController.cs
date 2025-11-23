@@ -1,159 +1,90 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 using Techno_Fix.Services;
 using Techno_FIx.Models.DTOs;
-using Techno_FIx.Services;
 
 namespace Techno_Fix.Controllers
 {
-    /// <summary>
-    /// Контроллер для управления техниками сервисного центра
-    /// </summary>
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class TechniciansController : ControllerBase
     {
         private readonly ITechnicianService _technicianService;
+        private readonly ILogger<TechniciansController> _logger;
 
-        public TechniciansController(ITechnicianService technicianService)
+        public TechniciansController(ITechnicianService technicianService, ILogger<TechniciansController> logger)
         {
             _technicianService = technicianService;
+            _logger = logger;
         }
 
-        /// <summary>
-        /// Получить список всех техников
-        /// </summary>
         [HttpGet]
+        [AllowAnonymous]
         public async Task<ActionResult<IEnumerable<TechnicianDTO>>> GetTechnicians()
         {
             var technicians = await _technicianService.GetAllTechniciansAsync();
             return Ok(technicians);
         }
 
-        /// <summary>
-        /// Получить техника по ID
-        /// </summary>
         [HttpGet("{id}")]
+        [AllowAnonymous]
         public async Task<ActionResult<TechnicianDTO>> GetTechnician(int id)
         {
             var technician = await _technicianService.GetTechnicianByIdAsync(id);
             if (technician == null)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Техник с ID {id} не найден.",
-                    instance = $"/api/technicians/{id}"
-                });
-            }
+                return NotFound(new { message = "Техник не найден" });
 
             return Ok(technician);
         }
 
-        /// <summary>
-        /// Создать нового техника
-        /// </summary>
         [HttpPost]
+        [Authorize(Roles = "Admin")]
         public async Task<ActionResult<TechnicianDTO>> CreateTechnician(CreateTechnicianDTO technicianDto)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new
-                {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
-            }
+                return BadRequest(ModelState);
 
             var technician = await _technicianService.CreateTechnicianAsync(technicianDto);
             return CreatedAtAction(nameof(GetTechnician), new { id = technician.Id }, technician);
         }
 
-        /// <summary>
-        /// Обновить данные техника
-        /// </summary>
         [HttpPut("{id}")]
-        public async Task<ActionResult<TechnicianDTO>> UpdateTechnician(int id, UpdateTechnicianDTO technicianDto)
+        [Authorize(Roles = "Admin,Technician")]
+        public async Task<IActionResult> UpdateTechnician(int id, UpdateTechnicianDTO technicianDto)
         {
             if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            // Техник может обновлять только свои данные
+            if (User.IsInRole("Technician"))
             {
-                return BadRequest(new
+                var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+                var userTechnicianId = int.Parse(User.FindFirst("technicianId")?.Value ?? "0");
+
+                if (userTechnicianId != id)
                 {
-                    title = "Bad Request",
-                    status = 400,
-                    detail = "Ошибки валидации",
-                    errors = ModelState.Values.SelectMany(v => v.Errors)
-                        .Select(e => e.ErrorMessage)
-                });
+                    return Forbid("Вы можете обновлять только свой профиль");
+                }
             }
 
-            var technician = await _technicianService.UpdateTechnicianAsync(id, technicianDto);
-            if (technician == null)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Техник с ID {id} не найден.",
-                    instance = $"/api/technicians/{id}"
-                });
-            }
-
-            return Ok(technician);
-        }
-
-        /// <summary>
-        /// Удалить техника
-        /// </summary>
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteTechnician(int id)
-        {
-            var result = await _technicianService.DeleteTechnicianAsync(id);
-            if (!result)
-            {
-                return NotFound(new
-                {
-                    title = "Not Found",
-                    status = 404,
-                    detail = $"Техник с ID {id} не найден.",
-                    instance = $"/api/technicians/{id}"
-                });
-            }
+            var updated = await _technicianService.UpdateTechnicianAsync(id, technicianDto);
+            if (updated == null) 
+                return NotFound(new { message = "Техник не найден" });
 
             return NoContent();
         }
 
-        /// <summary>
-        /// Получить активных техников
-        /// </summary>
-        [HttpGet("active")]
-        public async Task<ActionResult<IEnumerable<TechnicianDTO>>> GetActiveTechnicians()
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> DeleteTechnician(int id)
         {
-            var technicians = await _technicianService.GetActiveTechniciansAsync();
-            return Ok(technicians);
-        }
+            var deleted = await _technicianService.DeleteTechnicianAsync(id);
+            if (!deleted)
+                return NotFound(new { message = "Техник не найден" });
 
-        /// <summary>
-        /// Получить техников по специализации
-        /// </summary>
-        [HttpGet("specialization/{specialization}")]
-        public async Task<ActionResult<IEnumerable<TechnicianDTO>>> GetTechniciansBySpecialization(string specialization)
-        {
-            var technicians = await _technicianService.GetTechniciansBySpecializationAsync(specialization);
-            return Ok(technicians);
-        }
-
-        /// <summary>
-        /// Получить заказы техника
-        /// </summary>
-        [HttpGet("{id}/orders")]
-        public async Task<ActionResult<IEnumerable<RepairOrderDTO>>> GetTechnicianOrders(int id)
-        {
-            var orders = await _technicianService.GetTechnicianOrdersAsync(id);
-            return Ok(orders);
+            return NoContent();
         }
     }
 }
