@@ -84,7 +84,6 @@ namespace Techno_FIx.Controllers
                 return NotFound(new { message = $"Пользователь с ID {id} не найден" });
 
             user.Role = newRole;
-            user.UpdatedAt = DateTime.UtcNow;
 
             await _userRepository.UpdateAsync(user);
             return Ok(new { message = "Роль пользователя обновлена" });
