@@ -7,9 +7,7 @@ namespace Techno_FIx.Services
         Task<IEnumerable<ClientDTO>> GetAllClientsAsync();
         Task<ClientDTO?> GetClientByIdAsync(int id);
         Task<ClientDTO> CreateClientAsync(CreateClientDTO clientDto);
-        Task<ClientDTO?> UpdateClientAsync(int id, UpdateClientDTO clientDto);
+        Task<bool> UpdateClientAsync(int id, UpdateClientDTO clientDto);
         Task<bool> DeleteClientAsync(int id);
-        Task<IEnumerable<ClientDTO>> GetClientsWithDeviceCountAsync();
-        Task<IEnumerable<DeviceDTO>> GetClientDevicesAsync(int clientId);
     }
 }

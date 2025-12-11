@@ -13,52 +13,24 @@ namespace Techno_Fix.Services
         private readonly ITechnicianRepository _technicianRepository;
         private readonly IRepairOrderRepository _repairOrderRepository;
 
-        public TechnicianService(ITechnicianRepository technicianRepository,
-                               IRepairOrderRepository repairOrderRepository)
+        public TechnicianService(ITechnicianRepository technicianRepository, IRepairOrderRepository repairOrderRepository)
         {
             _technicianRepository = technicianRepository;
             _repairOrderRepository = repairOrderRepository;
         }
 
-        /// <summary>
-        /// Получить всех техников
-        /// </summary>
         public async Task<IEnumerable<TechnicianDTO>> GetAllTechniciansAsync()
         {
             var technicians = await _technicianRepository.GetAllAsync();
-            return technicians.Select(t => new TechnicianDTO
-            {
-                Id = t.Id,
-                FirstName = t.FirstName,
-                LastName = t.LastName,
-                Specialization = t.Specialization,
-                Phone = t.Phone,
-                ActiveOrdersCount = t.RepairOrders.Count
-            });
+            return technicians.Select(MapToTechnicianDTO);
         }
 
-        /// <summary>
-        /// Получить техника по ID
-        /// </summary>
         public async Task<TechnicianDTO?> GetTechnicianByIdAsync(int id)
         {
             var technician = await _technicianRepository.GetByIdAsync(id);
-            if (technician == null) return null;
-
-            return new TechnicianDTO
-            {
-                Id = technician.Id,
-                FirstName = technician.FirstName,
-                LastName = technician.LastName,
-                Specialization = technician.Specialization,
-                Phone = technician.Phone,
-                ActiveOrdersCount = technician.RepairOrders.Count
-            };
+            return technician == null ? null : MapToTechnicianDTO(technician);
         }
 
-        /// <summary>
-        /// Создать нового техника
-        /// </summary>
         public async Task<TechnicianDTO> CreateTechnicianAsync(CreateTechnicianDTO technicianDto)
         {
             var technician = new Technician
@@ -69,105 +41,78 @@ namespace Techno_Fix.Services
                 Phone = technicianDto.Phone
             };
 
-            var createdTechnician = await _technicianRepository.CreateAsync(technician);
-
-            return new TechnicianDTO
-            {
-                Id = createdTechnician.Id,
-                FirstName = createdTechnician.FirstName,
-                LastName = createdTechnician.LastName,
-                Specialization = createdTechnician.Specialization,
-                Phone = createdTechnician.Phone,
-                ActiveOrdersCount = 0
-            };
+            var created = await _technicianRepository.CreateAsync(technician);
+            return MapToTechnicianDTO(created);
         }
 
-        /// <summary>
-        /// Обновить данные техника
-        /// </summary>
-        public async Task<TechnicianDTO?> UpdateTechnicianAsync(int id, UpdateTechnicianDTO technicianDto)
+        public async Task<bool> UpdateTechnicianAsync(int id, UpdateTechnicianDTO technicianDto)
         {
-            var existingTechnician = await _technicianRepository.GetByIdAsync(id);
-            if (existingTechnician == null) return null;
+            var existing = await _technicianRepository.GetByIdAsync(id);
+            if (existing == null) return false;
 
-            existingTechnician.FirstName = technicianDto.FirstName;
-            existingTechnician.LastName = technicianDto.LastName;
-            existingTechnician.Specialization = technicianDto.Specialization;
-            existingTechnician.Phone = technicianDto.Phone;
+            existing.FirstName = technicianDto.FirstName;
+            existing.LastName = technicianDto.LastName;
+            existing.Specialization = technicianDto.Specialization;
+            existing.Phone = technicianDto.Phone;
 
-            var updatedTechnician = await _technicianRepository.UpdateAsync(existingTechnician);
-
-            return new TechnicianDTO
-            {
-                Id = updatedTechnician.Id,
-                FirstName = updatedTechnician.FirstName,
-                LastName = updatedTechnician.LastName,
-                Specialization = updatedTechnician.Specialization,
-                Phone = updatedTechnician.Phone,
-                ActiveOrdersCount = updatedTechnician.RepairOrders.Count
-            };
+            await _technicianRepository.UpdateAsync(existing);
+            return true;
         }
 
-        /// <summary>
-        /// Удалить техника
-        /// </summary>
         public async Task<bool> DeleteTechnicianAsync(int id)
         {
             return await _technicianRepository.DeleteAsync(id);
         }
 
-        /// <summary>
-        /// Получить активных техников
-        /// </summary>
         public async Task<IEnumerable<TechnicianDTO>> GetActiveTechniciansAsync()
         {
-            var technicians = await _technicianRepository.GetActiveTechniciansAsync();
-            return technicians.Select(t => new TechnicianDTO
-            {
-                Id = t.Id,
-                FirstName = t.FirstName,
-                LastName = t.LastName,
-                Specialization = t.Specialization,
-                Phone = t.Phone,
-                ActiveOrdersCount = t.RepairOrders.Count
-            });
+            var technicians = await _technicianRepository.GetAllAsync();
+            var activeTechnicians = technicians.Where(t => t.RepairOrders?.Any() == true);
+            return activeTechnicians.Select(MapToTechnicianDTO);
         }
 
-        /// <summary>
-        /// Получить техников по специализации
-        /// </summary>
         public async Task<IEnumerable<TechnicianDTO>> GetTechniciansBySpecializationAsync(string specialization)
         {
-            var technicians = await _technicianRepository.GetTechniciansBySpecializationAsync(specialization);
-            return technicians.Select(t => new TechnicianDTO
-            {
-                Id = t.Id,
-                FirstName = t.FirstName,
-                LastName = t.LastName,
-                Specialization = t.Specialization,
-                Phone = t.Phone,
-                ActiveOrdersCount = t.RepairOrders.Count
-            });
+            var technicians = await _technicianRepository.GetAllAsync();
+            var specializedTechnicians = technicians
+                .Where(t => t.Specialization.Contains(specialization, StringComparison.OrdinalIgnoreCase));
+            return specializedTechnicians.Select(MapToTechnicianDTO);
         }
 
-        /// <summary>
-        /// Получить заказы техника
-        /// </summary>
         public async Task<IEnumerable<RepairOrderDTO>> GetTechnicianOrdersAsync(int technicianId)
         {
-            var orders = await _repairOrderRepository.GetRepairOrdersByTechnicianAsync(technicianId);
-            return orders.Select(o => new RepairOrderDTO
+            var orders = await _repairOrderRepository.GetAllAsync();
+            var technicianOrders = orders.Where(o => o.TechnicianId == technicianId);
+            return technicianOrders.Select(MapToRepairOrderDTO);
+        }
+
+        private TechnicianDTO MapToTechnicianDTO(Technician technician)
+        {
+            return new TechnicianDTO
             {
-                Id = o.Id,
-                CreatedDate = o.CreatedDate,
-                CompletedDate = o.CompletedDate,
-                TotalCost = o.TotalCost,
-                Status = o.Status,
-                DeviceInfo = $"{o.Device.Brand} {o.Device.Model}",
-                ServiceName = o.Service.Name,
-                TechnicianName = $"{o.Technician.FirstName} {o.Technician.LastName}",
-                ClientName = $"{o.Device.Client.FirstName} {o.Device.Client.LastName}"
-            });
+                Id = technician.Id,
+                FirstName = technician.FirstName,
+                LastName = technician.LastName,
+                Specialization = technician.Specialization,
+                Phone = technician.Phone,
+                ActiveOrdersCount = technician.RepairOrders?.Count ?? 0
+            };
+        }
+
+        private RepairOrderDTO MapToRepairOrderDTO(RepairOrder order)
+        {
+            return new RepairOrderDTO
+            {
+                Id = order.Id,
+                CreatedDate = order.CreatedDate,
+                CompletedDate = order.CompletedDate,
+                TotalCost = order.TotalCost,
+                Status = order.Status,
+                DeviceInfo = $"{order.Device?.Brand} {order.Device?.Model}",
+                ServiceName = order.Service?.Name ?? "",
+                TechnicianName = $"{order.Technician?.FirstName} {order.Technician?.LastName}",
+                ClientName = $"{order.Device?.Client?.FirstName} {order.Device?.Client?.LastName}"
+            };
         }
     }
 }

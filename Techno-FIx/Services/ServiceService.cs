@@ -17,43 +17,18 @@ namespace Techno_Fix.Services
             _serviceRepository = serviceRepository;
         }
 
-        /// <summary>
-        /// Получить все услуги
-        /// </summary>
         public async Task<IEnumerable<ServiceDTO>> GetAllServicesAsync()
         {
             var services = await _serviceRepository.GetAllAsync();
-            return services.Select(s => new ServiceDTO
-            {
-                Id = s.Id,
-                Name = s.Name,
-                Description = s.Description,
-                Price = s.Price,
-                OrdersCount = s.RepairOrders.Count
-            });
+            return services.Select(MapToServiceDTO);
         }
 
-        /// <summary>
-        /// Получить услугу по ID
-        /// </summary>
         public async Task<ServiceDTO?> GetServiceByIdAsync(int id)
         {
             var service = await _serviceRepository.GetByIdAsync(id);
-            if (service == null) return null;
-
-            return new ServiceDTO
-            {
-                Id = service.Id,
-                Name = service.Name,
-                Description = service.Description,
-                Price = service.Price,
-                OrdersCount = service.RepairOrders.Count
-            };
+            return service == null ? null : MapToServiceDTO(service);
         }
 
-        /// <summary>
-        /// Создать новую услугу
-        /// </summary>
         public async Task<ServiceDTO> CreateServiceAsync(CreateServiceDTO serviceDto)
         {
             var service = new Service
@@ -63,83 +38,49 @@ namespace Techno_Fix.Services
                 Price = serviceDto.Price
             };
 
-            var createdService = await _serviceRepository.CreateAsync(service);
-
-            return new ServiceDTO
-            {
-                Id = createdService.Id,
-                Name = createdService.Name,
-                Description = createdService.Description,
-                Price = createdService.Price,
-                OrdersCount = 0
-            };
+            var created = await _serviceRepository.CreateAsync(service);
+            return MapToServiceDTO(created);
         }
 
-        /// <summary>
-        /// Обновить данные услуги
-        /// </summary>
-        public async Task<ServiceDTO?> UpdateServiceAsync(int id, CreateServiceDTO serviceDto)
+        public async Task<bool> UpdateServiceAsync(int id, CreateServiceDTO serviceDto)
         {
-            var existingService = await _serviceRepository.GetByIdAsync(id);
-            if (existingService == null) return null;
+            var existing = await _serviceRepository.GetByIdAsync(id);
+            if (existing == null) return false;
 
-            existingService.Name = serviceDto.Name;
-            existingService.Description = serviceDto.Description;
-            existingService.Price = serviceDto.Price;
+            existing.Name = serviceDto.Name;
+            existing.Description = serviceDto.Description;
+            existing.Price = serviceDto.Price;
 
-            var updatedService = await _serviceRepository.UpdateAsync(existingService);
-
-            return new ServiceDTO
-            {
-                Id = updatedService.Id,
-                Name = updatedService.Name,
-                Description = updatedService.Description,
-                Price = updatedService.Price,
-                OrdersCount = updatedService.RepairOrders.Count
-            };
+            await _serviceRepository.UpdateAsync(existing);
+            return true;
         }
 
-        /// <summary>
-        /// Удалить услугу
-        /// </summary>
         public async Task<bool> DeleteServiceAsync(int id)
         {
             return await _serviceRepository.DeleteAsync(id);
         }
 
-        /// <summary>
-        /// Получить популярные услуги (с наибольшим количеством заказов)
-        /// </summary>
-        public async Task<IEnumerable<ServiceDTO>> GetPopularServicesAsync()
+        public async Task<IEnumerable<ServiceDTO>> GetPopularServicesAsync(int topN = 5)
         {
             var services = await _serviceRepository.GetAllAsync();
-            return services
-                .OrderByDescending(s => s.RepairOrders.Count)
-                .Take(5)
-                .Select(s => new ServiceDTO
-                {
-                    Id = s.Id,
-                    Name = s.Name,
-                    Description = s.Description,
-                    Price = s.Price,
-                    OrdersCount = s.RepairOrders.Count
-                });
+            var popularServices = services
+                .OrderByDescending(s => s.RepairOrders?.Count ?? 0)
+                .Take(topN);
+
+            return popularServices.Select(MapToServiceDTO);
         }
 
-        /// <summary>
-        /// Получить услуги по диапазону цен
-        /// </summary>
-        public async Task<IEnumerable<ServiceDTO>> GetServicesByPriceRangeAsync(decimal minPrice, decimal maxPrice)
+        private ServiceDTO MapToServiceDTO(Service service)
         {
-            var services = await _serviceRepository.GetServicesByPriceRangeAsync(minPrice, maxPrice);
-            return services.Select(s => new ServiceDTO
+            return new ServiceDTO
             {
-                Id = s.Id,
-                Name = s.Name,
-                Description = s.Description,
-                Price = s.Price,
-                OrdersCount = s.RepairOrders.Count
-            });
+                Id = service.Id,
+                Name = service.Name,
+                Description = service.Description,
+                Price = service.Price,
+                OrdersCount = service.RepairOrders?.Count ?? 0
+            };
         }
     }
 }
+
